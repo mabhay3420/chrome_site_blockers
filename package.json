@@ -1,0 +1,15 @@
+{
+  "name": "chrome_site_blockers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Chrome extension to block domains and URL patterns.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:e2e",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0"
+  }
+}

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minimal Site Blocker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel__header">
+        <div>
+          <h1>Site Blocker</h1>
+          <p>Block by domain or wildcard pattern.</p>
+        </div>
+        <button id="settings-toggle" type="button" class="button button--ghost">Settings</button>
+      </header>
+
+      <section id="settings-panel" class="settings-panel" hidden>
+        <h2 class="settings-panel__title">Security Settings</h2>
+        <p id="settings-helper" class="settings-panel__helper"></p>
+
+        <div class="settings-panel__row">
+          <label id="new-pin-label" class="form__label">Master PIN</label>
+          <div id="new-pin-inputs" class="otp-inputs" aria-label="New PIN"></div>
+        </div>
+
+        <div class="settings-panel__actions">
+          <button id="save-master-pin" type="button" class="button button--small">Save PIN</button>
+          <button id="settings-close" type="button" class="button button--ghost button--small">
+            Close
+          </button>
+        </div>
+        <p id="settings-message" class="message message--inline" aria-live="polite"></p>
+      </section>
+
+      <form id="block-form" class="form">
+        <label class="form__label" for="entry-type">Type</label>
+        <select id="entry-type" name="entry-type" class="form__control">
+          <option value="domain">Domain</option>
+          <option value="pattern">Pattern</option>
+        </select>
+
+        <label class="form__label" for="entry-value">Value</label>
+        <input
+          id="entry-value"
+          name="entry-value"
+          class="form__control"
+          placeholder="example.com or *://*.example.com/*"
+          autocomplete="off"
+          required
+        />
+        <div id="entry-suggestions" class="suggestions" hidden></div>
+
+        <label class="form__label">Duration</label>
+        <div class="duration-templates" role="group" aria-label="Duration templates">
+          <button
+            type="button"
+            id="duration-template-indefinite"
+            class="duration-template duration-template--active"
+            data-duration-template="indefinite"
+            aria-pressed="true"
+          >
+            Indefinite
+          </button>
+          <button
+            type="button"
+            id="duration-template-15m"
+            class="duration-template"
+            data-duration-template="15m"
+            aria-pressed="false"
+          >
+            15 min
+          </button>
+          <button
+            type="button"
+            id="duration-template-30m"
+            class="duration-template"
+            data-duration-template="30m"
+            aria-pressed="false"
+          >
+            30 min
+          </button>
+          <button
+            type="button"
+            id="duration-template-1h"
+            class="duration-template"
+            data-duration-template="1h"
+            aria-pressed="false"
+          >
+            1 hour
+          </button>
+          <button
+            type="button"
+            id="duration-template-4h"
+            class="duration-template"
+            data-duration-template="4h"
+            aria-pressed="false"
+          >
+            4 hours
+          </button>
+          <button
+            type="button"
+            id="duration-template-1d"
+            class="duration-template"
+            data-duration-template="1d"
+            aria-pressed="false"
+          >
+            1 day
+          </button>
+          <button
+            type="button"
+            id="duration-template-custom"
+            class="duration-template"
+            data-duration-template="custom"
+            aria-pressed="false"
+          >
+            Custom
+          </button>
+        </div>
+
+        <div id="custom-duration-row" class="duration-custom" hidden>
+          <input
+            id="custom-duration-value"
+            name="custom-duration-value"
+            class="form__control"
+            type="number"
+            min="1"
+            step="1"
+            value="1"
+          />
+          <select id="custom-duration-unit" name="custom-duration-unit" class="form__control">
+            <option value="second">second(s)</option>
+            <option value="minute">minute(s)</option>
+            <option value="hour">hour(s)</option>
+            <option value="day">day(s)</option>
+          </select>
+        </div>
+
+        <label class="protect-row" for="requires-master-pin">
+          <input id="requires-master-pin" type="checkbox" />
+          <span>Require master PIN to remove this rule</span>
+        </label>
+
+        <button type="submit" class="button">Add block rule</button>
+      </form>
+
+      <p id="message" class="message" aria-live="polite"></p>
+
+      <section>
+        <h2>Current rules</h2>
+        <ul id="entry-list" class="entry-list"></ul>
+        <div id="entry-details" class="entry-details" hidden></div>
+      </section>
+    </main>
+
+    <div id="pin-modal" class="modal" hidden>
+      <div class="modal__card">
+        <h2 class="modal__title">PIN Required</h2>
+        <p class="modal__text">Enter master PIN to remove this protected rule.</p>
+        <div id="remove-pin-inputs" class="otp-inputs" aria-label="Remove PIN"></div>
+        <div class="modal__actions">
+          <button id="pin-cancel" type="button" class="button button--ghost button--small">
+            Cancel
+          </button>
+          <button id="pin-confirm" type="button" class="button button--small">Confirm</button>
+        </div>
+        <p id="pin-modal-message" class="message message--inline" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

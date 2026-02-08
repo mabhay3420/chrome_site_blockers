@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Minimal Site Blocker",
+  "description": "Block sites by domain or wildcard pattern.",
+  "version": "1.0.0",
+  "permissions": [
+    "alarms",
+    "storage",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Site Blocker",
+    "default_popup": "popup.html"
+  }
+}
