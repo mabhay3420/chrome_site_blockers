@@ -179,6 +179,49 @@ body {
   margin: 0;
 }
 
+.advanced-options {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #f7faff;
+}
+
+.advanced-options__card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d1dff6;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.advanced-options__card-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.advanced-options__textarea {
+  resize: vertical;
+  min-height: 76px;
+}
+
+.advanced-options__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.advanced-options__hint {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .otp-inputs {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -365,6 +408,11 @@ h2 {
 .entry-chip__badge--pin {
   background: #fff0db;
   color: #92400e;
+}
+
+.entry-chip__badge--focus {
+  background: #e4fbe8;
+  color: #166534;
 }
 
 .entry-details {

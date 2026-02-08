@@ -14,6 +14,19 @@ test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    if (req.url?.startsWith("/advanced-elements")) {
+      res.end(`<!doctype html>
+        <html>
+          <body>
+            <h1>ok:${req.url}</h1>
+            <section id="related">related videos</section>
+            <section id="comments">comments block</section>
+            <section id="keep">stay visible</section>
+          </body>
+        </html>`);
+      return;
+    }
+
     res.end(`<!doctype html><html><body><h1>ok:${req.url}</h1></body></html>`);
   });
 
@@ -79,6 +92,16 @@ async function addRule(popup, type, value, options = {}) {
     if (options.customUnit) {
       await popup.selectOption("#custom-duration-unit", options.customUnit);
     }
+  }
+
+  const shouldUseAdvanced = Array.isArray(options.advancedSelectors) && options.advancedSelectors.length > 0;
+  const advancedCheckbox = popup.locator("#use-advanced-options");
+  if ((await advancedCheckbox.isChecked()) !== shouldUseAdvanced) {
+    await advancedCheckbox.click();
+  }
+
+  if (shouldUseAdvanced) {
+    await popup.fill("#entry-selectors", options.advancedSelectors.join("\n"));
   }
 
   await popup.click("button[type='submit']");
@@ -156,15 +179,9 @@ async function waitForLogHit(popup, entryKey, expectedSite) {
 }
 
 async function expectBlocked(page, url) {
-  let errorMessage = "";
-
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded" });
-  } catch (error) {
-    errorMessage = String(error);
-  }
-
-  expect(errorMessage).toContain("ERR_BLOCKED_BY_CLIENT");
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/blocked\.html$/);
+  await expect(page.locator("h1")).toContainText("That site can wait.");
 }
 
 test("blocks exact domain rule from popup", async () => {
@@ -174,7 +191,7 @@ test("blocks exact domain rule from popup", async () => {
   try {
     const popup = await openPopup(context, extensionId);
     await addRule(popup, "domain", "localhost");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     const page = await context.newPage();
     await expectBlocked(page, `http://localhost:${serverPort}/domain-check`);
@@ -192,7 +209,7 @@ test("blocks wildcard pattern rule from popup", async () => {
   try {
     const popup = await openPopup(context, extensionId);
     await addRule(popup, "pattern", "*://127.0.0.1/*");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     const page = await context.newPage();
     await expectBlocked(page, `http://127.0.0.1:${serverPort}/pattern-check`);
@@ -220,7 +237,29 @@ test("shows fuzzy autocomplete suggestions for curated sites", async () => {
     await expect(popup.locator("#entry-value")).toHaveValue("x.com");
 
     await popup.click("button[type='submit']");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("advanced selector templates fill youtube and x.com selectors", async () => {
+  const userDataDir = await mkdtemp(path.join(tmpdir(), "site-blocker-template-fill-"));
+  const { context, extensionId } = await launchWithExtension(userDataDir);
+
+  try {
+    const popup = await openPopup(context, extensionId);
+    await popup.click("#use-advanced-options");
+
+    await popup.click("#youtube-template");
+    await popup.click("#x-template");
+
+    const selectorsValue = await popup.inputValue("#entry-selectors");
+    expect(selectorsValue).toContain("#related");
+    expect(selectorsValue).toContain("button[aria-label*='Notifications']");
+    expect(selectorsValue).toContain("ytd-rich-shelf-renderer");
+    expect(selectorsValue).toContain("[data-testid='sidebarColumn']");
   } finally {
     await context.close();
     await rm(userDataDir, { recursive: true, force: true });
@@ -250,7 +289,7 @@ test("protected rule requires PIN and supports emergency override", async () => 
     const popup = await openPopup(context, extensionId);
     await setMasterPin(popup, "123456");
     await addRule(popup, "domain", "localhost", { requiresMasterPin: true });
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     await expandRuleByValue(popup, "localhost");
     await popup.click(".entry-item__remove");
@@ -259,7 +298,7 @@ test("protected rule requires PIN and supports emergency override", async () => 
     await fillOtp(popup, "remove", "000000");
     await popup.click("#pin-confirm");
     await expect(popup.locator("#pin-modal-message")).toContainText("Incorrect PIN");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     await fillOtp(popup, "remove", "456789");
     await popup.click("#pin-confirm");
@@ -280,7 +319,7 @@ test("master PIN can be reset without entering previous PIN", async () => {
     await setMasterPin(popup, "654321");
 
     await addRule(popup, "domain", "localhost", { requiresMasterPin: true });
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
     await expandRuleByValue(popup, "localhost");
     await popup.click(".entry-item__remove");
     await expect(popup.locator("#pin-modal")).toBeVisible();
@@ -288,7 +327,7 @@ test("master PIN can be reset without entering previous PIN", async () => {
     await fillOtp(popup, "remove", "123456");
     await popup.click("#pin-confirm");
     await expect(popup.locator("#pin-modal-message")).toContainText("Incorrect PIN");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     await fillOtp(popup, "remove", "654321");
     await popup.click("#pin-confirm");
@@ -306,7 +345,7 @@ test("same rule keeps the longest duration when added repeatedly", async () => {
   try {
     const popup = await openPopup(context, extensionId);
     await addRule(popup, "domain", "localhost", { durationPreset: "30m" });
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     const firstEntry = await getStoredRuleEntry(popup, "domain", "localhost");
     expect(firstEntry).not.toBeNull();
@@ -339,7 +378,7 @@ test("stores blocked logs bucketed by rule key", async () => {
     const popup = await openPopup(context, extensionId);
     await addRule(popup, "domain", "localhost");
     await addRule(popup, "pattern", "*://127.0.0.1/*");
-    await waitForRuleCount(popup, 2);
+    await waitForRuleCount(popup, 4);
 
     const page = await context.newPage();
     await expectBlocked(page, `http://localhost:${serverPort}/bucket-check`);
@@ -369,7 +408,7 @@ test("custom timed rule expires and unblocks automatically", async () => {
       customValue: 3,
       customUnit: "second"
     });
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     const blockedPage = await context.newPage();
     await expectBlocked(blockedPage, `http://localhost:${serverPort}/timed-check`);
@@ -395,7 +434,7 @@ test("removing a rule unblocks navigation", async () => {
   try {
     const popup = await openPopup(context, extensionId);
     await addRule(popup, "domain", "localhost");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
 
     await expandRuleByValue(popup, "localhost");
     await popup.click(".entry-item__remove");
@@ -421,7 +460,7 @@ test("rule is persisted across browser restarts", async () => {
     const first = await launchWithExtension(userDataDir);
     const popup = await openPopup(first.context, first.extensionId);
     await addRule(popup, "domain", "localhost");
-    await waitForRuleCount(popup, 1);
+    await waitForRuleCount(popup, 2);
     await first.context.close();
 
     const second = await launchWithExtension(userDataDir);
@@ -446,6 +485,33 @@ test("shows validation error for invalid domain", async () => {
 
     await expect(popup.locator("#message")).toContainText("Enter a valid domain");
     await waitForRuleCount(popup, 0);
+  } finally {
+    await context.close();
+    await rm(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("advanced mode hides selected elements without blocking the page", async () => {
+  const userDataDir = await mkdtemp(path.join(tmpdir(), "site-blocker-advanced-hide-"));
+  const { context, extensionId } = await launchWithExtension(userDataDir);
+
+  try {
+    const popup = await openPopup(context, extensionId);
+    await addRule(popup, "domain", "localhost", {
+      advancedSelectors: ["#related", "#comments"]
+    });
+
+    await waitForRuleCount(popup, 0);
+
+    const page = await context.newPage();
+    const response = await page.goto(`http://localhost:${serverPort}/advanced-elements`, {
+      waitUntil: "domcontentloaded"
+    });
+
+    expect(response?.status()).toBe(200);
+    await expect(page.locator("#keep")).toBeVisible();
+    await expect(page.locator("#related")).toHaveCSS("display", "none");
+    await expect(page.locator("#comments")).toHaveCSS("display", "none");
   } finally {
     await context.close();
     await rm(userDataDir, { recursive: true, force: true });

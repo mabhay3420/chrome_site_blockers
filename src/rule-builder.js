@@ -14,6 +14,11 @@ export const ENTRY_TYPES = {
   PATTERN: "pattern"
 };
 
+export const ENTRY_ACTIONS = {
+  BLOCK: "block",
+  HIDE_ELEMENTS: "hide-elements"
+};
+
 /**
  * Keep dynamic rule IDs in a known range to avoid collisions.
  */
@@ -40,6 +45,9 @@ const BLOCKED_RESOURCE_TYPES = [
   "websocket",
   "other"
 ];
+const MAIN_FRAME_RESOURCE_TYPES = ["main_frame"];
+const NON_MAIN_RESOURCE_TYPES = BLOCKED_RESOURCE_TYPES.filter((type) => type !== "main_frame");
+const BLOCK_PAGE_EXTENSION_PATH = "/blocked.html";
 
 /**
  * Normalize incoming user entries and discard invalid rows.
@@ -86,13 +94,18 @@ export function normalizeEntries(rawEntries) {
 function buildNormalizedEntry(baseEntry, rawEntry) {
   const expiresAt = normalizeExpiry(rawEntry?.expiresAt);
   const requiresMasterPin = normalizeProtectedRule(rawEntry?.requiresMasterPin);
+  const action = normalizeEntryAction(rawEntry?.action);
+  const selectors = normalizeSelectors(rawEntry?.selectors);
 
-  let nextEntry = { ...baseEntry };
+  let nextEntry = { ...baseEntry, action };
   if (expiresAt) {
     nextEntry = { ...nextEntry, expiresAt };
   }
   if (requiresMasterPin) {
     nextEntry = { ...nextEntry, requiresMasterPin: true };
+  }
+  if (action === ENTRY_ACTIONS.HIDE_ELEMENTS && selectors.length > 0) {
+    nextEntry = { ...nextEntry, selectors };
   }
 
   return nextEntry;
@@ -114,33 +127,7 @@ function upsertNormalizedEntry(normalized, keyToIndex, entry) {
  * Convert user entries into Chrome DNR dynamic block rules.
  */
 export function buildDynamicRules(entries) {
-  return normalizeEntries(entries).map((entry, index) => {
-    const ruleId = RULE_ID_OFFSET + index;
-
-    if (entry.type === ENTRY_TYPES.DOMAIN) {
-      // ||example.com^ means "any scheme + any subdomain for this registrable host".
-      return {
-        id: ruleId,
-        priority: 1,
-        action: { type: "block" },
-        condition: {
-          urlFilter: `||${entry.value}^`,
-          resourceTypes: BLOCKED_RESOURCE_TYPES
-        }
-      };
-    }
-
-    // Pattern entries use regexFilter so users can provide match-like wildcard input.
-    return {
-      id: ruleId,
-      priority: 1,
-      action: { type: "block" },
-      condition: {
-        regexFilter: wildcardPatternToRegex(entry.value),
-        resourceTypes: BLOCKED_RESOURCE_TYPES
-      }
-    };
-  });
+  return buildRuleRecords(entries).map((record) => record.rule);
 }
 
 /**
@@ -155,12 +142,68 @@ export function entryKeyFromEntry(entry) {
  */
 export function buildRuleIdToEntryKeyMap(entries) {
   const mapping = {};
-
-  normalizeEntries(entries).forEach((entry, index) => {
-    mapping[String(RULE_ID_OFFSET + index)] = entryKeyFromEntry(entry);
+  buildRuleRecords(entries).forEach((record) => {
+    mapping[String(record.rule.id)] = record.entryKey;
   });
 
   return mapping;
+}
+
+function buildRuleRecords(entries) {
+  const records = [];
+  let nextRuleId = RULE_ID_OFFSET;
+
+  const blockEntries = normalizeEntries(entries).filter(
+    (entry) => entry.action !== ENTRY_ACTIONS.HIDE_ELEMENTS
+  );
+
+  for (const entry of blockEntries) {
+    if (records.length >= MAX_DYNAMIC_RULES) {
+      break;
+    }
+
+    const entryKey = entryKeyFromEntry(entry);
+    records.push({
+      entryKey,
+      rule: {
+        id: nextRuleId++,
+        priority: 2,
+        action: { type: "redirect", redirect: { extensionPath: BLOCK_PAGE_EXTENSION_PATH } },
+        condition: buildConditionFromEntry(entry, MAIN_FRAME_RESOURCE_TYPES)
+      }
+    });
+
+    if (records.length >= MAX_DYNAMIC_RULES) {
+      break;
+    }
+
+    records.push({
+      entryKey,
+      rule: {
+        id: nextRuleId++,
+        priority: 1,
+        action: { type: "block" },
+        condition: buildConditionFromEntry(entry, NON_MAIN_RESOURCE_TYPES)
+      }
+    });
+  }
+
+  return records;
+}
+
+function buildConditionFromEntry(entry, resourceTypes) {
+  if (entry.type === ENTRY_TYPES.DOMAIN) {
+    // ||example.com^ means "any scheme + any subdomain for this registrable host".
+    return {
+      urlFilter: `||${entry.value}^`,
+      resourceTypes
+    };
+  }
+
+  return {
+    regexFilter: wildcardPatternToRegex(entry.value),
+    resourceTypes
+  };
 }
 
 /**
@@ -200,6 +243,31 @@ export function filterActiveEntries(entries, nowMs = Date.now()) {
 
 function normalizeProtectedRule(rawValue) {
   return rawValue === true || rawValue === "true" || rawValue === 1 || rawValue === "1";
+}
+
+function normalizeEntryAction(rawAction) {
+  return rawAction === ENTRY_ACTIONS.HIDE_ELEMENTS ? ENTRY_ACTIONS.HIDE_ELEMENTS : ENTRY_ACTIONS.BLOCK;
+}
+
+function normalizeSelectors(rawSelectors) {
+  const source = Array.isArray(rawSelectors)
+    ? rawSelectors
+    : String(rawSelectors ?? "")
+        .split(/\r?\n|,/)
+        .map((selector) => selector.trim());
+
+  const unique = [];
+  const seen = new Set();
+
+  source.forEach((selector) => {
+    if (!selector || seen.has(selector)) {
+      return;
+    }
+    seen.add(selector);
+    unique.push(selector);
+  });
+
+  return unique.slice(0, 30);
 }
 
 /**

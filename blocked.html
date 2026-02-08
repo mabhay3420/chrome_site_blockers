@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stay Focused</title>
+    <link rel="stylesheet" href="blocked.css" />
+  </head>
+  <body>
+    <main class="blocked-card">
+      <p class="blocked-card__tag">Minimal Site Blocker</p>
+      <h1 class="blocked-card__title">That site can wait.</h1>
+      <p id="fun-message" class="blocked-card__message"></p>
+      <p class="blocked-card__tip">Take a breath. Ship one small task first.</p>
+      <div class="blocked-card__actions">
+        <button id="go-back" class="blocked-card__button" type="button">Go Back</button>
+      </div>
+    </main>
+
+    <script>
+      const messages = [
+        "You have better uses of time than this tab right now.",
+        "Your future self asked me to intercept this detour.",
+        "Nice try. Focus mode is still on duty.",
+        "One deep-work sprint now, scrolling later."
+      ];
+
+      const selected = messages[Math.floor(Math.random() * messages.length)];
+      document.getElementById("fun-message").textContent = selected;
+
+      document.getElementById("go-back").addEventListener("click", () => {
+        history.back();
+      });
+    </script>
+  </body>
+</html>

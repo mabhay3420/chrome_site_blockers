@@ -4,3 +4,4 @@ test-results/
 .npm-cache/
 .playwright-browsers/
 .playwright-browsers-*/
+dist/

@@ -13,8 +13,10 @@ The popup UI uses a code-style font stack for a compact, developer-friendly look
 - Fuzzy autocomplete for 20 curated distracting sites (including programmer-heavy ones)
 - Optional protected-removal mode per rule (requires master PIN to delete)
 - Settings panel to set/change a single global 6-digit master PIN
+- Advanced options checkbox to hide specific page elements by CSS selector
 - Compact current-rules chips (click a chip to open details)
 - Rules stored in `chrome.storage.local`
+- Full-block rules redirect to a custom fun blocker page
 - Blocking enforced via `chrome.declarativeNetRequest` dynamic rules
 - Per-rule recent blocked-site logging (bucketed by rule)
 - Clear, commented source code for extension beginners
@@ -27,6 +29,8 @@ The popup UI uses a code-style font stack for a compact, developer-friendly look
 - `popup.html`: Popup markup
 - `popup.css`: Minimal polished UI styling (code-like font stack)
 - `popup.js`: Popup behavior + validation
+- `content.js`: Advanced mode element hiding on matched pages
+- `blocked.html` + `blocked.css`: Custom full-block destination page
 - `src/rule-builder.js`: Shared normalization/rule conversion logic
 - `tests/e2e/blocker.spec.js`: End-to-end extension tests
 
@@ -64,6 +68,14 @@ The popup UI uses a code-style font stack for a compact, developer-friendly look
 
 If your browser supports Chrome extensions, these unpacked-install steps are usually the same.
 
+## Packaged Build From GitHub Releases
+
+- Every push to `main` runs `.github/workflows/release-extension.yml`.
+- The workflow packages the extension and publishes a pre-release with a `.zip` asset.
+- Open the repository **Releases** page and download the latest `chrome_site_blockers_<sha>.zip`.
+- Extract the zip locally.
+- Load it from `chrome://extensions` (or equivalent) using **Load unpacked**.
+
 ## Usage
 
 ### Block a domain
@@ -86,6 +98,18 @@ If your browser supports Chrome extensions, these unpacked-install steps are usu
 
 If you add an existing rule again (same domain/pattern), the rule is updated with the new duration.
 If the same rule is added with multiple durations, the longest duration is kept.
+
+### Advanced options (hide elements instead of full block)
+- Enable `Advanced options`.
+- Provide one or more CSS selectors (newline or comma separated).
+- Optional quick-fill templates:
+  - `YouTube focus` (recommendations, comments, shorts shelf/container, notifications)
+  - `X.com focus`
+- In advanced mode, the site still opens, but matching elements are hidden.
+
+### Full-block experience
+- Default mode (advanced options unchecked) fully blocks matched sites.
+- Instead of Chrome’s generic blocked page, users are redirected to a custom friendly page with a funny focus message.
 
 ### Smart autocomplete
 - In `domain` mode, typing initials or fuzzy text opens suggestions.

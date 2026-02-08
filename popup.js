@@ -1,6 +1,7 @@
 import {
   BLOCKED_ENTRIES_KEY,
   BLOCK_LOGS_KEY,
+  ENTRY_ACTIONS,
   ENTRY_TYPES,
   MASTER_PIN_HASH_KEY,
   entryKeyFromEntry,
@@ -26,6 +27,26 @@ const CUSTOM_UNIT_MS = {
 
 const MASTER_PIN_LENGTH = 6;
 const EMERGENCY_MASTER_PIN = "456789";
+const YOUTUBE_TEMPLATE_SELECTORS = [
+  "#related",
+  "#comments",
+  "ytd-watch-next-secondary-results-renderer",
+  "ytd-comments",
+  "a[title='Shorts']",
+  "ytd-mini-guide-entry-renderer a[title='Shorts']",
+  "ytd-guide-entry-renderer a[title='Shorts']",
+  "ytd-notification-topbar-button-renderer",
+  "button[aria-label*='Notifications']",
+  "ytd-rich-shelf-renderer",
+  "ytd-reel-shelf-renderer"
+];
+const X_TEMPLATE_SELECTORS = [
+  "[data-testid='sidebarColumn']",
+  "a[href='/notifications']",
+  "a[href='/i/verified-choose']",
+  "[aria-label='Timeline: Trending now']",
+  "[data-testid='DMDrawer']"
+];
 
 /**
  * Curated defaults for common distracting sites (incl. programmer-heavy contexts).
@@ -64,6 +85,11 @@ const customDurationRow = document.getElementById("custom-duration-row");
 const customDurationValueInput = document.getElementById("custom-duration-value");
 const customDurationUnitSelect = document.getElementById("custom-duration-unit");
 const requiresMasterPinCheckbox = document.getElementById("requires-master-pin");
+const useAdvancedOptionsCheckbox = document.getElementById("use-advanced-options");
+const selectorsRow = document.getElementById("selectors-row");
+const selectorsInput = document.getElementById("entry-selectors");
+const youtubeTemplateButton = document.getElementById("youtube-template");
+const xTemplateButton = document.getElementById("x-template");
 const messageEl = document.getElementById("message");
 const entryListEl = document.getElementById("entry-list");
 const entryDetailsEl = document.getElementById("entry-details");
@@ -229,6 +255,13 @@ function renderEntries(entries, logsByEntryKey) {
       badges.appendChild(timedBadge);
     }
 
+    if (entry.action === ENTRY_ACTIONS.HIDE_ELEMENTS) {
+      const focusBadge = document.createElement("span");
+      focusBadge.className = "entry-chip__badge entry-chip__badge--focus";
+      focusBadge.textContent = "Focus";
+      badges.appendChild(focusBadge);
+    }
+
     if (entry.requiresMasterPin) {
       const pinBadge = document.createElement("span");
       pinBadge.className = "entry-chip__badge entry-chip__badge--pin";
@@ -274,6 +307,13 @@ function renderEntryDetails(entry, index, logsByEntryKey) {
   type.className = "entry-item__type";
   type.textContent = `Type: ${entry.type}`;
 
+  const action = document.createElement("span");
+  action.className = "entry-item__security";
+  action.textContent =
+    entry.action === ENTRY_ACTIONS.HIDE_ELEMENTS
+      ? "Behavior: hide matching elements"
+      : "Behavior: block entire site";
+
   const security = document.createElement("span");
   security.className = "entry-item__security";
   security.textContent = entry.requiresMasterPin ? "Removal: PIN protected" : "Removal: open";
@@ -282,7 +322,18 @@ function renderEntryDetails(entry, index, logsByEntryKey) {
   expiry.className = "entry-item__expiry";
   expiry.textContent = formatExpiryLabel(entry);
 
-  meta.append(type, security, expiry);
+  meta.append(type, action, security, expiry);
+
+  if (entry.action === ENTRY_ACTIONS.HIDE_ELEMENTS) {
+    const selectors = Array.isArray(entry.selectors) ? entry.selectors : [];
+    const selectorSummary = document.createElement("span");
+    selectorSummary.className = "entry-item__security";
+    selectorSummary.textContent =
+      selectors.length > 0
+        ? `Selectors: ${selectors.join(" | ")}`
+        : "Selectors: none";
+    meta.appendChild(selectorSummary);
+  }
 
   const logBucket = Array.isArray(logsByEntryKey[entryKeyFromEntry(entry)])
     ? logsByEntryKey[entryKeyFromEntry(entry)]
@@ -369,6 +420,21 @@ function buildEntryFromForm() {
   }
 
   const requiresMasterPin = Boolean(requiresMasterPinCheckbox.checked);
+  const action = useAdvancedOptionsCheckbox.checked
+    ? ENTRY_ACTIONS.HIDE_ELEMENTS
+    : ENTRY_ACTIONS.BLOCK;
+  const selectors = action === ENTRY_ACTIONS.HIDE_ELEMENTS ? normalizeSelectorInput(selectorsInput.value) : [];
+
+  if (action === ENTRY_ACTIONS.HIDE_ELEMENTS && selectors.length === 0) {
+    return { error: "Add at least one CSS selector in Advanced options." };
+  }
+
+  if (action === ENTRY_ACTIONS.HIDE_ELEMENTS) {
+    const invalidSelector = selectors.find((selector) => !isValidCssSelector(selector));
+    if (invalidSelector) {
+      return { error: `Invalid CSS selector: ${invalidSelector}` };
+    }
+  }
 
   if (type === ENTRY_TYPES.DOMAIN) {
     const domain = normalizeDomain(value);
@@ -377,15 +443,15 @@ function buildEntryFromForm() {
     }
 
     const entry = { type: ENTRY_TYPES.DOMAIN, value: domain };
-    return { entry: applyOptionalFields(entry, duration.expiresAt, requiresMasterPin) };
+    return { entry: applyOptionalFields(entry, duration.expiresAt, requiresMasterPin, action, selectors) };
   }
 
   const patternEntry = { type: ENTRY_TYPES.PATTERN, value };
-  return { entry: applyOptionalFields(patternEntry, duration.expiresAt, requiresMasterPin) };
+  return { entry: applyOptionalFields(patternEntry, duration.expiresAt, requiresMasterPin, action, selectors) };
 }
 
-function applyOptionalFields(baseEntry, expiresAt, requiresMasterPin) {
-  let nextEntry = { ...baseEntry };
+function applyOptionalFields(baseEntry, expiresAt, requiresMasterPin, action, selectors) {
+  let nextEntry = { ...baseEntry, action };
 
   if (expiresAt) {
     nextEntry = { ...nextEntry, expiresAt };
@@ -395,7 +461,29 @@ function applyOptionalFields(baseEntry, expiresAt, requiresMasterPin) {
     nextEntry = { ...nextEntry, requiresMasterPin: true };
   }
 
+  if (action === ENTRY_ACTIONS.HIDE_ELEMENTS && selectors.length > 0) {
+    nextEntry = { ...nextEntry, selectors };
+  }
+
   return nextEntry;
+}
+
+function normalizeSelectorInput(rawValue) {
+  const parts = String(rawValue ?? "")
+    .split(/\r?\n|,/)
+    .map((selector) => selector.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(parts)).slice(0, 30);
+}
+
+function isValidCssSelector(selector) {
+  try {
+    document.createDocumentFragment().querySelector(selector);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getDurationSortValue(expiresAt) {
@@ -414,7 +502,8 @@ function keepLongestDurationEntry(existingEntry, incomingEntry) {
 
   const merged = {
     type: incomingEntry.type,
-    value: incomingEntry.value
+    value: incomingEntry.value,
+    action: incomingEntry.action
   };
 
   if (Number.isFinite(longestDuration) && longestDuration > 0) {
@@ -423,6 +512,10 @@ function keepLongestDurationEntry(existingEntry, incomingEntry) {
 
   if (existingEntry.requiresMasterPin || incomingEntry.requiresMasterPin) {
     merged.requiresMasterPin = true;
+  }
+
+  if (incomingEntry.action === ENTRY_ACTIONS.HIDE_ELEMENTS) {
+    merged.selectors = Array.isArray(incomingEntry.selectors) ? incomingEntry.selectors : [];
   }
 
   return merged;
@@ -472,6 +565,18 @@ function applyDurationTemplate(preset) {
   });
 
   customDurationRow.hidden = preset !== "custom";
+}
+
+function updateAdvancedUiState() {
+  selectorsRow.hidden = !useAdvancedOptionsCheckbox.checked;
+}
+
+function applySelectorTemplate(templateSelectors) {
+  const existing = normalizeSelectorInput(selectorsInput.value);
+  const merged = Array.from(new Set([...existing, ...templateSelectors]));
+  selectorsInput.value = merged.join("\n");
+  useAdvancedOptionsCheckbox.checked = true;
+  updateAdvancedUiState();
 }
 
 function normalizeLookupValue(value) {
@@ -761,6 +866,9 @@ form.addEventListener("submit", async (event) => {
   await saveEntries(nextEntries);
   valueInput.value = "";
   requiresMasterPinCheckbox.checked = false;
+  useAdvancedOptionsCheckbox.checked = false;
+  selectorsInput.value = "";
+  updateAdvancedUiState();
   hideSuggestions();
   setMessage(message, "ok");
   await refreshList();
@@ -982,6 +1090,18 @@ durationTemplateButtons.forEach((button) => {
   });
 });
 
+useAdvancedOptionsCheckbox.addEventListener("change", () => {
+  updateAdvancedUiState();
+});
+
+youtubeTemplateButton.addEventListener("click", () => {
+  applySelectorTemplate(YOUTUBE_TEMPLATE_SELECTORS);
+});
+
+xTemplateButton.addEventListener("click", () => {
+  applySelectorTemplate(X_TEMPLATE_SELECTORS);
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") {
     return;
@@ -1001,6 +1121,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 applyDurationTemplate(selectedDurationTemplate);
+updateAdvancedUiState();
 refreshSecurityState().catch((error) => {
   console.error("Failed to initialize security state", error);
 });

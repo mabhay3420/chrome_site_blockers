@@ -142,6 +142,38 @@
           <span>Require master PIN to remove this rule</span>
         </label>
 
+        <label class="protect-row" for="use-advanced-options">
+          <input id="use-advanced-options" type="checkbox" />
+          <span>Advanced options</span>
+        </label>
+
+        <div id="selectors-row" class="advanced-options" hidden>
+          <div class="advanced-options__card">
+            <p class="advanced-options__card-title">Custom elements</p>
+            <label class="form__label" for="entry-selectors">CSS selectors to hide</label>
+            <textarea
+              id="entry-selectors"
+              name="entry-selectors"
+              class="form__control advanced-options__textarea"
+              rows="4"
+              placeholder="#related, #comments&#10;ytd-watch-next-secondary-results-renderer"
+            ></textarea>
+
+            <div class="advanced-options__quick">
+              <button id="youtube-template" type="button" class="button button--ghost button--small">
+                YouTube focus
+              </button>
+              <button id="x-template" type="button" class="button button--ghost button--small">
+                X.com focus
+              </button>
+            </div>
+          </div>
+
+          <p class="advanced-options__hint">
+            Add one selector per line or comma-separated values.
+          </p>
+        </div>
+
         <button type="submit" class="button">Add block rule</button>
       </form>
 

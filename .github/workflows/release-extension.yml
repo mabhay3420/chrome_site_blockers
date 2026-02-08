@@ -1,0 +1,51 @@
+name: Package and Release Extension
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build extension package
+        run: |
+          mkdir -p dist
+          ZIP_NAME="chrome_site_blockers_${GITHUB_SHA::7}.zip"
+          zip -r "dist/${ZIP_NAME}" \
+            manifest.json \
+            background.js \
+            popup.html \
+            popup.css \
+            popup.js \
+            content.js \
+            blocked.html \
+            blocked.css \
+            src
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release with packaged extension
+        uses: ncipollo/release-action@v1
+        with:
+          tag: main-build-${{ github.run_number }}
+          name: "Main build #${{ github.run_number }}"
+          commit: ${{ github.sha }}
+          prerelease: true
+          allowUpdates: true
+          generateReleaseNotes: true
+          artifacts: dist/*.zip
+          artifactErrorsFailBuild: true
